@@ -7,6 +7,7 @@ import (
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/muhammadnurbasari/onesmile-test-protobuffer/proto/generate"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -26,8 +27,6 @@ type HistoryDetails struct {
 	Quantity  uint64
 	SubTotal  uint64
 }
-
-type ID struct{ Id uint64 }
 
 func (t TransactionsServer) Create(ctx context.Context, param *generate.Transaction) (*empty.Empty, error) {
 	tx := t.Connection.Begin()
@@ -67,6 +66,7 @@ func (t TransactionsServer) Create(ctx context.Context, param *generate.Transact
 
 	tx.Commit()
 
+	log.Info().Msg("success : transaction has been created")
 	return new(empty.Empty), nil
 
 }
@@ -79,11 +79,11 @@ func (t TransactionsServer) Histories(context.Context, *empty.Empty) (*generate.
 	}
 
 	var histories []*generate.History
-	var ids []ID
+	var ids []uint64
 	for rowsHistories.Next() {
 		var (
 			each generate.History
-			id   ID
+			id   uint64
 		)
 		err = rowsHistories.Scan(&each.Id, &each.GrandTotal, &each.CreditCard)
 
@@ -93,26 +93,26 @@ func (t TransactionsServer) Histories(context.Context, *empty.Empty) (*generate.
 
 		histories = append(histories, &each)
 
-		id.Id = uint64(each.Id)
+		id = uint64(each.Id)
 
 		ids = append(ids, id)
 
 	}
 
-	var whereIn = "("
+	// var whereIn = "("
 
-	for key, id := range ids {
+	// for key, id := range ids {
 
-		if key == len(ids)-1 {
-			whereIn += fmt.Sprintf("%d", id.Id)
-		} else {
+	// 	if key == len(ids)-1 {
+	// 		whereIn += fmt.Sprintf("%d", id.Id)
+	// 	} else {
 
-			whereIn += fmt.Sprintf("%d,", id.Id)
-		}
-	}
-	whereIn += ")"
+	// 		whereIn += fmt.Sprintf("%d,", id.Id)
+	// 	}
+	// }
+	// whereIn += ")"
 
-	rowsDetails, err := t.Connection.Select("name, quantity, sub_total, history_id").Table("history_details").Where("history_id IN " + whereIn).Rows()
+	rowsDetails, err := t.Connection.Select("name, quantity, sub_total, history_id").Table("history_details").Where("history_id IN ?", ids).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -127,30 +127,32 @@ func (t TransactionsServer) Histories(context.Context, *empty.Empty) (*generate.
 			return nil, errors.New("test rows histories : " + err.Error())
 		}
 
-		fmt.Println(each)
-
 		items = append(items, each)
 
 	}
 
+	fmt.Println(histories)
+
 	for key, history := range histories {
-		var items []*generate.Item
+		var itemsFix []*generate.Item
 		for _, item := range items {
-			var each *generate.Item
+			var each generate.Item
 			if int64(history.Id) == item.HistoryId {
 				each.Name = item.Name
 				each.SubTotal = item.SubTotal
 				each.Quantity = item.Quantity
 				each.HistoryId = item.HistoryId
-				items = append(items, each)
+				itemsFix = append(itemsFix, &each)
 			}
 		}
+
 		// history.Items = items
-		histories[key].Items = items
+		histories[key].Items = itemsFix
 	}
 
 	var result generate.HistoryList
 	result.List = histories
 
+	log.Info().Msg("success : get transaction history successfully")
 	return &result, nil
 }
