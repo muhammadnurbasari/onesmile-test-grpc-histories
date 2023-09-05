@@ -109,7 +109,7 @@ func (s *basicServiceHistory) Histories(ctx context.Context) (*models.HistoryLis
 
 	var items []*models.Item
 	for rowsDetails.Next() {
-		var each *models.Item
+		var each models.Item
 
 		err = rowsDetails.Scan(&each.Name, &each.Quantity, &each.SubTotal, &each.HistoryId)
 
@@ -117,7 +117,7 @@ func (s *basicServiceHistory) Histories(ctx context.Context) (*models.HistoryLis
 			return nil, errors.New("test rows histories : " + err.Error())
 		}
 
-		items = append(items, each)
+		items = append(items, &each)
 
 	}
 

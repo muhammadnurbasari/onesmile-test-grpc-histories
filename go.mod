@@ -3,7 +3,6 @@ module github.com/muhammadnurbasari/onesmile-test-grpc-histories
 go 1.18
 
 require (
-	github.com/golang/protobuf v1.5.3
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
 	github.com/muhammadnurbasari/onesmile-test-protobuffer v1.3.0
@@ -16,6 +15,7 @@ require (
 require (
 	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
+	github.com/golang/protobuf v1.5.3 // indirect
 )
 
 require (
