@@ -5,9 +5,12 @@ import (
 	"net"
 	"os"
 
+	logkit "github.com/go-kit/kit/log"
 	"github.com/joho/godotenv"
 	"github.com/muhammadnurbasari/onesmile-test-grpc-histories/db"
-	"github.com/muhammadnurbasari/onesmile-test-grpc-histories/histories"
+	"github.com/muhammadnurbasari/onesmile-test-grpc-histories/endpointHistory"
+	"github.com/muhammadnurbasari/onesmile-test-grpc-histories/serviceHistory"
+	"github.com/muhammadnurbasari/onesmile-test-grpc-histories/transport"
 	"github.com/muhammadnurbasari/onesmile-test-protobuffer/proto/generate"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -44,9 +47,21 @@ func main() {
 
 	fmt.Println("Succesfully connected")
 
+	var logger logkit.Logger
+	{
+		logger = logkit.NewLogfmtLogger(os.Stderr)
+		logger = logkit.With(logger, "ts", logkit.DefaultTimestampUTC)
+		logger = logkit.With(logger, "caller", logkit.DefaultCaller)
+	}
+
+	var (
+		service    = serviceHistory.NewServiceHistory(db)
+		endpoints  = endpointHistory.NewEndpointHistory(service)
+		grpcServer = transport.NewGrpcServer(endpoints, logger)
+	)
+
 	srv := grpc.NewServer()
-	var transactionSrv = histories.TransactionsServer{Connection: db}
-	generate.RegisterTransactionsServer(srv, transactionSrv)
+	generate.RegisterTransactionsServer(srv, grpcServer)
 
 	log.Info().Msg("Starting RPC server at " + ":" + PORT)
 

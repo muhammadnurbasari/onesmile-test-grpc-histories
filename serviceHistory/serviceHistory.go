@@ -1,37 +1,41 @@
-package histories
+package serviceHistory
 
 import (
 	"context"
 	"errors"
 	"fmt"
 
-	"github.com/golang/protobuf/ptypes/empty"
-	"github.com/muhammadnurbasari/onesmile-test-protobuffer/proto/generate"
+	"github.com/muhammadnurbasari/onesmile-test-grpc-histories/models"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
-type TransactionsServer struct {
+type ServiceHistory interface {
+	Create(ctx context.Context, param *models.CreateRequest) error
+	Histories(context.Context) (*models.HistoryList, error)
+}
+
+func NewServiceHistory(Connection *gorm.DB) ServiceHistory {
+	var s ServiceHistory
+	{
+		s = NewBasicServiceHistory(Connection)
+	}
+
+	return s
+}
+
+func NewBasicServiceHistory(Connection *gorm.DB) ServiceHistory {
+	return &basicServiceHistory{Connection}
+}
+
+type basicServiceHistory struct {
 	Connection *gorm.DB
 }
 
-type Histories struct {
-	Id         uint64
-	CreditCard string
-	GrandTotal uint64
-}
+func (s *basicServiceHistory) Create(ctx context.Context, param *models.CreateRequest) error {
+	tx := s.Connection.Begin()
 
-type HistoryDetails struct {
-	HistoryId uint64
-	Name      string
-	Quantity  uint64
-	SubTotal  uint64
-}
-
-func (t TransactionsServer) Create(ctx context.Context, param *generate.Transaction) (*empty.Empty, error) {
-	tx := t.Connection.Begin()
-
-	histories := Histories{
+	histories := models.Histories{
 		CreditCard: param.CreditCard,
 		GrandTotal: uint64(param.GrandTotal),
 	}
@@ -40,15 +44,15 @@ func (t TransactionsServer) Create(ctx context.Context, param *generate.Transact
 
 	if result.Error != nil {
 		tx.Rollback()
-		return nil, result.Error
+		return result.Error
 	}
 
 	id := histories.Id
 
-	var historyDetails []*HistoryDetails
+	var historyDetails []*models.HistoryDetails
 
 	for _, v := range param.Items {
-		each := HistoryDetails{
+		each := models.HistoryDetails{
 			HistoryId: id,
 			Name:      v.Name,
 			Quantity:  uint64(v.Quantity),
@@ -61,28 +65,27 @@ func (t TransactionsServer) Create(ctx context.Context, param *generate.Transact
 
 	if result.Error != nil {
 		tx.Rollback()
-		return nil, result.Error
+		return result.Error
 	}
 
 	tx.Commit()
 
 	log.Info().Msg("success : transaction has been created")
-	return new(empty.Empty), nil
-
+	return nil
 }
 
-func (t TransactionsServer) Histories(context.Context, *empty.Empty) (*generate.HistoryList, error) {
-	rowsHistories, err := t.Connection.Select("id, grand_total, credit_card").Table("histories").Rows()
+func (s *basicServiceHistory) Histories(ctx context.Context) (*models.HistoryList, error) {
+	rowsHistories, err := s.Connection.Select("id, grand_total, credit_card").Table("histories").Rows()
 
 	if err != nil {
 		return nil, err
 	}
 
-	var histories []*generate.History
+	var histories []*models.History
 	var ids []uint64
 	for rowsHistories.Next() {
 		var (
-			each generate.History
+			each models.History
 			id   uint64
 		)
 		err = rowsHistories.Scan(&each.Id, &each.GrandTotal, &each.CreditCard)
@@ -99,14 +102,14 @@ func (t TransactionsServer) Histories(context.Context, *empty.Empty) (*generate.
 
 	}
 
-	rowsDetails, err := t.Connection.Select("name, quantity, sub_total, history_id").Table("history_details").Where("history_id IN ?", ids).Rows()
+	rowsDetails, err := s.Connection.Select("name, quantity, sub_total, history_id").Table("history_details").Where("history_id IN ?", ids).Rows()
 	if err != nil {
 		return nil, err
 	}
 
-	var items []*generate.Item
+	var items []*models.Item
 	for rowsDetails.Next() {
-		var each *generate.Item
+		var each *models.Item
 
 		err = rowsDetails.Scan(&each.Name, &each.Quantity, &each.SubTotal, &each.HistoryId)
 
@@ -121,9 +124,9 @@ func (t TransactionsServer) Histories(context.Context, *empty.Empty) (*generate.
 	fmt.Println(histories)
 
 	for key, history := range histories {
-		var itemsFix []*generate.Item
+		var itemsFix []*models.Item
 		for _, item := range items {
-			var each generate.Item
+			var each models.Item
 			if int64(history.Id) == item.HistoryId {
 				each.Name = item.Name
 				each.SubTotal = item.SubTotal
@@ -137,7 +140,7 @@ func (t TransactionsServer) Histories(context.Context, *empty.Empty) (*generate.
 		histories[key].Items = itemsFix
 	}
 
-	var result generate.HistoryList
+	var result models.HistoryList
 	result.List = histories
 
 	log.Info().Msg("success : get transaction history successfully")
